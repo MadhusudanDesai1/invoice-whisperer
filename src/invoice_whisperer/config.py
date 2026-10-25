@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 # Project root = two levels above src/invoice_whisperer/
 ROOT = Path(__file__).resolve().parents[2]
-load_dotenv(ROOT / ".env")
+load_dotenv(ROOT / ".env", override=True)
 
 
 @dataclass(frozen=True)
