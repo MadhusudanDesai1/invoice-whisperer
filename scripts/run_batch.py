@@ -4,6 +4,7 @@ import json
 from decimal import Decimal
 from pathlib import Path
 
+from invoice_whisperer.extract import QuotaExhausted
 from invoice_whisperer.config import ROOT, load_settings
 from invoice_whisperer.pipeline import process_document
 from invoice_whisperer.router import route
@@ -48,6 +49,9 @@ def main() -> None:
     for n, inv_id in enumerate(ids, 1):
         try:
             r = process_document(FOLDER / f"{inv_id}.png", s)
+        except QuotaExhausted as e:
+            print(f"\nSTOPPED: {e}")
+            break
         except Exception as e:  # e.g. retries exhausted: skip, cache keeps finished work
             print(f"[{n}/{len(ids)}] {inv_id}: FAILED ({type(e).__name__}: {str(e)[:120]})")
             continue

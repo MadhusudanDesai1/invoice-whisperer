@@ -52,6 +52,13 @@ def _get_budget(s: Settings) -> TokenBudget:
     return _budget
 
 
+class QuotaExhausted(RuntimeError):
+    """Server asked for a long wait (daily token limit): stop and resume later."""
+
+
+MAX_WAIT_SECONDS = 300  # longer than this = daily limit, not a per-minute limit
+
+
 @dataclass
 class ExtractionResult:
     extraction: Extraction | None
@@ -115,6 +122,10 @@ def _call_api(client: Groq, s: Settings, messages: list, temperature: float) -> 
                 budget.record(budget.estimate)  # assume the failed call counted
             ra = _retry_after(e)
             backoff = ra + 1 if ra else min(10 * 2 ** attempt, 120) + random.uniform(0, 3)
+            if code == 429 and backoff > MAX_WAIT_SECONDS:
+                raise QuotaExhausted(
+                    f"Daily token limit reached (server asks for {backoff / 60:.0f} min). "
+                    "Finished work is cached; re-run later to resume.") from e
             print(f"  [{code or 'connection'}] retry {attempt + 1}/{s.max_retries} in {backoff:.0f}s")
             time.sleep(backoff)
     raise RuntimeError("unreachable")
