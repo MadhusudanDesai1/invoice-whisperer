@@ -62,3 +62,22 @@ def metrics(df: pd.DataFrame, threshold: float) -> dict:
         "confident_errors": int((auto & ~df["correct"]).sum()),
         "correction_rate": float(df["corrected"].sum() / reviewed) if reviewed else nan,
     }
+
+
+def review_metrics(df: pd.DataFrame, threshold: float) -> dict:
+    """Metrics that include human review (final_value) at one threshold."""
+    rev = df[df["reviewed"] == 1]
+    # Final value: human-reviewed fields use final_value; the rest keep the model value.
+    flagged = df["confidence"] < threshold
+    final_ok = df["final_correct"] | (~(df["reviewed"] == 1) & df["correct"])
+    total = df["field"] == "total"
+    nan = float("nan")
+    return {
+        "reviewed_fields": len(rev),
+        "corrected_fields": int(df["corrected"].sum()),
+        "correction_rate": float(df["corrected"].sum() / len(rev)) if len(rev) else nan,
+        "model_correct_when_reviewed": float(rev["correct"].mean()) if len(rev) else nan,
+        "final_accuracy_all": float(final_ok.mean()),
+        "final_exact_total": float(final_ok[total].mean()),
+        "unreviewed_flagged": int((flagged & (df["reviewed"] == 0)).sum()),
+    }
