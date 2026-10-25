@@ -1,0 +1,20 @@
+# Virtual environment
+.venv/
+
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+
+# Generated data and caches (regenerate with scripts)
+data/synthetic/
+data/outputs/
+.cache/
+
+# OS / misc
+.DS_Store
+Thumbs.db
