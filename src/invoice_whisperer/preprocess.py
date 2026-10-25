@@ -1,13 +1,32 @@
-"""Stage 2 - Pre-process: deskew, contrast, resize, encode for the Groq API."""
+"""Stage 2 - Pre-process: flatten shadows, deskew, resize, encode for Groq."""
 import base64
 import io
 
 import numpy as np
-from PIL import Image, ImageOps
+from PIL import Image, ImageFilter, ImageOps
 
 # Groq allows 20 MB per request; we stay far below it (base64 adds ~33%).
 MAX_LONG_SIDE = 1600
 MAX_JPEG_BYTES = 4_000_000
+
+
+def flatten_illumination(img: Image.Image, work: int = 400) -> Image.Image:
+    """Remove shadows / uneven lighting by dividing out the paper brightness.
+
+    1. Shrink a copy, then a max-filter wipes out thin dark text, leaving only
+       the paper's brightness (shadows included).
+    2. Blur it smooth and scale it back up.
+    3. Divide the image by that background: shadowed paper becomes white again.
+    """
+    img = img.convert("RGB")
+    small = img.copy()
+    small.thumbnail((work, work), Image.LANCZOS)
+    bg = small.filter(ImageFilter.MaxFilter(15)).filter(ImageFilter.GaussianBlur(8))
+    bg = bg.resize(img.size, Image.BILINEAR)
+    a = np.asarray(img, dtype=np.float32)
+    b = np.maximum(np.asarray(bg, dtype=np.float32), 1.0)
+    out = np.clip(a / b * 255.0, 0, 255).astype(np.uint8)
+    return Image.fromarray(out)
 
 
 def estimate_skew(img: Image.Image, search: float = 15.0) -> float:
@@ -15,12 +34,14 @@ def estimate_skew(img: Image.Image, search: float = 15.0) -> float:
 
     Projection-profile method: when text lines are horizontal, the row sums of
     the 'ink' pixels are spiky (high variance). We try angles and keep the best.
+    Shadows are flattened first so they are not mistaken for ink.
     """
-    gray = ImageOps.grayscale(img)
-    gray.thumbnail((500, 500))
+    thumb = img.convert("RGB")
+    thumb.thumbnail((500, 500))
+    gray = ImageOps.grayscale(flatten_illumination(thumb))
     arr = np.asarray(gray, dtype=np.float32)
-    # Ink = clearly darker than the typical background (robust to shadows).
-    ink = Image.fromarray(((arr < 0.6 * np.median(arr)) * 255).astype(np.uint8))
+    # After flattening, paper is ~255, so ink = clearly darker than the median.
+    ink = Image.fromarray(((arr < 0.8 * np.median(arr)) * 255).astype(np.uint8))
 
     def score(angle: float) -> float:
         rows = np.asarray(ink.rotate(angle, fillcolor=0), dtype=np.float32).sum(axis=1)
@@ -32,13 +53,13 @@ def estimate_skew(img: Image.Image, search: float = 15.0) -> float:
 
 
 def preprocess_page(img: Image.Image, deskew: bool = True, enhance: bool = True) -> Image.Image:
-    """Deskew, boost contrast, and shrink so the long side is <= MAX_LONG_SIDE."""
+    """Deskew, flatten shadows, and shrink so the long side is <= MAX_LONG_SIDE."""
     if deskew:
         angle = estimate_skew(img)
         if abs(angle) >= 0.5:  # ignore tiny corrections
             img = img.rotate(angle, expand=True, fillcolor="white", resample=Image.BICUBIC)
     if enhance:
-        img = ImageOps.autocontrast(img, cutoff=1)
+        img = flatten_illumination(img)
     img = img.copy()
     img.thumbnail((MAX_LONG_SIDE, MAX_LONG_SIDE), Image.LANCZOS)
     return img
