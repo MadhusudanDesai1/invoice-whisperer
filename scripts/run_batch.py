@@ -35,7 +35,7 @@ def quick_wrong(ex, truth: dict) -> list[str]:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--noise", default="ugly", choices=["ugly", "mild", "clean", "all"])
+    ap.add_argument("--noise", default="ugly", choices=["ugly", "mild", "clean", "brutal", "all"])
     ap.add_argument("--limit", type=int, default=8)
     args = ap.parse_args()
 

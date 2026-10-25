@@ -1,4 +1,4 @@
-"""Stage 3 - Extract: call the Groq vision model with retries and an on-disk cache."""
+"""Stage 3 - Extract: call the Groq vision model with a token budget, retries and a cache."""
 import hashlib
 import json
 import random
@@ -11,6 +11,7 @@ from PIL import Image
 
 from .config import Settings
 from .preprocess import to_data_url
+from .ratelimit import TokenBudget
 from .schema import Extraction
 
 BASE_PROMPT = """You are an invoice data-extraction engine. Read the invoice image and \
@@ -33,14 +34,22 @@ Rules:
 - confidence is your honest certainty per field: 1.0 = certain, 0.5 = unsure, below 0.3 = mostly guessing. Lower it for blurry, skewed or shadowed text.
 """
 
-# Variant 1 is used for the second pass in Step 8 (different wording).
+# Variant 1 is used for the second pass (different wording).
 PROMPTS = [
     BASE_PROMPT,
     "Re-read every digit carefully. Start from the bottom of the invoice (the total) "
     "and work upwards.\n\n" + BASE_PROMPT,
 ]
 
-_last_call = 0.0  # monotonic time of the last real API call (for rate-limit spacing)
+_budget: TokenBudget | None = None  # shared across all calls in this process
+
+
+def _get_budget(s: Settings) -> TokenBudget:
+    """Create the process-wide token budget on first use."""
+    global _budget
+    if _budget is None:
+        _budget = TokenBudget(s.tpm_limit, s.tpm_safety, s.sleep_between_calls)
+    return _budget
 
 
 @dataclass
@@ -69,35 +78,43 @@ def _cache_key(*parts: str) -> str:
     return h.hexdigest()
 
 
+def _retry_after(e: Exception) -> float | None:
+    """Seconds the server asked us to wait (Retry-After header), if present."""
+    headers = getattr(getattr(e, "response", None), "headers", None)
+    try:
+        return float(headers.get("retry-after")) if headers else None
+    except (TypeError, ValueError):
+        return None
+
+
 def _call_api(client: Groq, s: Settings, messages: list, temperature: float) -> tuple[str, dict]:
-    """One chat call with spacing between calls and exponential backoff on 429/5xx."""
-    global _last_call
+    """One chat call: token-budget wait, then retries (honouring Retry-After) on 429/5xx."""
+    budget = _get_budget(s)
     kwargs: dict = dict(
         model=s.model, messages=messages, temperature=temperature,
-        max_tokens=2000, response_format={"type": "json_object"},
+        max_tokens=1200, response_format={"type": "json_object"},
     )
     if s.reasoning_effort:
         kwargs["extra_body"] = {"reasoning_effort": s.reasoning_effort}
 
     for attempt in range(s.max_retries + 1):
-        wait = s.sleep_between_calls - (time.monotonic() - _last_call)
-        if wait > 0:
-            print(f"  waiting {wait:.0f}s to respect rate limits...")
-            time.sleep(wait)
+        budget.acquire()
         try:
             resp = client.chat.completions.create(**kwargs)
-            _last_call = time.monotonic()
             u = resp.usage
             usage = {"prompt": u.prompt_tokens, "completion": u.completion_tokens,
                      "total": u.total_tokens} if u else {}
+            budget.record(usage.get("total", budget.estimate))
             return resp.choices[0].message.content or "", usage
         except (APIConnectionError, APIStatusError) as e:
-            _last_call = time.monotonic()
             code = getattr(e, "status_code", None)
             retryable = code is None or code == 429 or code >= 500
             if not retryable or attempt == s.max_retries:
                 raise
-            backoff = min(10 * 2 ** attempt, 120) + random.uniform(0, 3)
+            if code == 429:
+                budget.record(budget.estimate)  # assume the failed call counted
+            ra = _retry_after(e)
+            backoff = ra + 1 if ra else min(10 * 2 ** attempt, 120) + random.uniform(0, 3)
             print(f"  [{code or 'connection'}] retry {attempt + 1}/{s.max_retries} in {backoff:.0f}s")
             time.sleep(backoff)
     raise RuntimeError("unreachable")
