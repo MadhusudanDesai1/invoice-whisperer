@@ -15,8 +15,9 @@ class Settings:
     groq_api_key: str
     model: str                    # Groq vision model ID (swap in .env)
     confidence_threshold: float   # fields >= this are auto-accepted
-    sleep_between_calls: float    # seconds to pause between API calls
+    sleep_between_calls: float    # min seconds between API calls
     max_retries: int              # retries on 429 / transient errors
+    reasoning_effort: str         # "" = don't send; else value from Groq docs
     cache_dir: Path = ROOT / ".cache"
 
 
@@ -32,6 +33,7 @@ def load_settings() -> Settings:
         groq_api_key=key,
         model=model,
         confidence_threshold=float(os.getenv("CONFIDENCE_THRESHOLD", "0.85")),
-        sleep_between_calls=float(os.getenv("SLEEP_BETWEEN_CALLS", "2.0")),
+        sleep_between_calls=float(os.getenv("SLEEP_BETWEEN_CALLS", "30")),
         max_retries=int(os.getenv("MAX_RETRIES", "5")),
+        reasoning_effort=os.getenv("REASONING_EFFORT", "").strip(),
     )
