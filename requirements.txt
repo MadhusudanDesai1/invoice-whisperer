@@ -1,0 +1,21 @@
+# LLM provider + config
+groq
+python-dotenv
+
+# Data validation
+pydantic
+
+# Image / PDF handling
+pillow
+pymupdf
+
+# Evaluation + plots
+numpy
+pandas
+matplotlib
+
+# Human-review UI
+streamlit
+
+# Tests
+pytest
