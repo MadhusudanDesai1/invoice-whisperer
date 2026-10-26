@@ -41,3 +41,10 @@ def test_failed_validation_is_capped():
     ones = {f: 1.0 for f in make().confidence}
     c = combine(make(), {**ones, "total": 0.2}, ones)
     assert c["total"].final <= 0.5
+
+
+def test_self_floor_caps_unsure_field():
+    from invoice_whisperer.confidence import blend
+    assert blend(0.7, 1.0, 1.0, self_floor=0.9) <= 0.5   # unsure model -> review
+    assert blend(0.7, 1.0, 1.0, self_floor=0.0) > 0.9    # rule off: old behaviour
+    assert blend(0.95, 1.0, 1.0, self_floor=0.9) > 0.9   # confident model unaffected

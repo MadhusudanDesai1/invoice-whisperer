@@ -20,6 +20,7 @@ class Settings:
     reasoning_effort: str         # "" = don't send; else value from Groq docs
     tpm_limit: int                # tokens-per-minute limit of your Groq plan
     tpm_safety: float             # use only this fraction of it (0-1)
+    self_floor: float             # self-rating below this -> always review
     cache_dir: Path = ROOT / ".cache"
 
 
@@ -40,4 +41,5 @@ def load_settings() -> Settings:
         reasoning_effort=os.getenv("REASONING_EFFORT", "").strip(),
         tpm_limit=int(os.getenv("TPM_LIMIT", "8000")),
         tpm_safety=float(os.getenv("TPM_SAFETY", "0.95")),
+        self_floor=float(os.getenv("SELF_FLOOR", "0.9")),
     )

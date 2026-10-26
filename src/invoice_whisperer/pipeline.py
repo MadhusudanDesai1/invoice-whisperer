@@ -41,5 +41,5 @@ def process_document(path: Path, s: Settings) -> DocResult:
         agree = {f: 0.0 for f in val.scores}
     else:
         agree = agreement(r1.extraction, r2.extraction)
-    conf = combine(r1.extraction, val.scores, agree)
+    conf = combine(r1.extraction, val.scores, agree, s.self_floor)
     return DocResult(str(path), r1.extraction, r2.extraction, val, conf, api_calls=calls)

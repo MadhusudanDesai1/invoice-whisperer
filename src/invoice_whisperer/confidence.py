@@ -10,6 +10,7 @@ from .schema import FIELDS, Extraction
 W_SELF, W_VALID, W_AGREE = 0.25, 0.35, 0.40
 CAP_ON_FAILED_VALIDATION = 0.5   # validation score <= 0.2 -> confidence capped
 DEFAULT_SELF = 0.5               # used when the model gave no self-rating
+# A self-rating below the floor caps confidence, so a human always sees the field.
 
 
 @dataclass
@@ -55,16 +56,21 @@ def agreement(a: Extraction, b: Extraction) -> dict[str, float]:
     }
 
 
-def combine(ex: Extraction, validation: dict[str, float],
-            agree: dict[str, float]) -> dict[str, FieldConfidence]:
+def blend(s: float, v: float, g: float, self_floor: float = 0.0) -> float:
+    """Weighted blend of self-rating, validation and agreement, with safety caps."""
+    final = W_SELF * s + W_VALID * v + W_AGREE * g
+    if v <= 0.2 or s < self_floor:  # failed validation, or the model itself is unsure
+        final = min(final, CAP_ON_FAILED_VALIDATION)
+    return round(final, 4)
+
+
+def combine(ex: Extraction, validation: dict[str, float], agree: dict[str, float],
+            self_floor: float = 0.0) -> dict[str, FieldConfidence]:
     """Blend the three signals into one confidence per field."""
     out: dict[str, FieldConfidence] = {}
     for f in FIELDS:
         s = ex.confidence.get(f, DEFAULT_SELF)
         v = validation.get(f, 0.0)
         g = agree.get(f, 0.0)
-        final = W_SELF * s + W_VALID * v + W_AGREE * g
-        if v <= 0.2:  # failed arithmetic / missing: never auto-accept
-            final = min(final, CAP_ON_FAILED_VALIDATION)
-        out[f] = FieldConfidence(s, v, g, round(final, 4))
+        out[f] = FieldConfidence(s, v, g, blend(s, v, g, self_floor))
     return out
