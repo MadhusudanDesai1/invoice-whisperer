@@ -1,5 +1,6 @@
 """Stage 7 - Human review page. Run: streamlit run src/invoice_whisperer/review_app.py"""
 import json
+import os
 from pathlib import Path
 
 import pandas as pd
@@ -11,7 +12,7 @@ from invoice_whisperer.review import (apply_review, items_to_canonical, load_doc
 from invoice_whisperer.schema import FIELDS
 from invoice_whisperer.store import connect
 
-DB = ROOT / "data" / "outputs" / "results.db"
+DB = Path(os.environ.get("REVIEW_DB", ROOT / "data" / "outputs" / "results.db"))
 ITEM_COLS = ["description", "quantity", "unit_price", "amount"]
 
 st.set_page_config(page_title="Invoice Whisperer - Review", layout="wide")

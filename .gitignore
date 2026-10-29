@@ -18,3 +18,4 @@ data/outputs/
 # OS / misc
 .DS_Store
 Thumbs.db
+data/demo/
