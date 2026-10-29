@@ -12,6 +12,11 @@ Businesses receive invoices as photos, scans and PDFs in every layout, and someo
 
 ## How it works
 
+```
+image / PDF -> ingest -> pre-process -> extract (2 passes) -> validate -> confidence -> route -> review UI -> SQLite -> evaluate
+```
+
+
 1. **Ingest:** images and PDFs (PyMuPDF renders PDF pages).
 2. **Pre-process:** deskew, shadow removal (illumination flattening), resize and JPEG-encode under the API size limit.
 3. **Extract:** a Groq-hosted vision model (`qwen/qwen3.8-27b`) returns JSON with a self-rated confidence per field. Two passes use different prompts and temperatures.
