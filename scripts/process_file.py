@@ -1,4 +1,4 @@
-"""Run any bill through the pipeline: python scripts/demo.py path/to/bill.pdf"""
+"""Run any bill through the pipeline: python scripts/process_file.py path/to/bill.pdf"""
 import sys
 from pathlib import Path
 

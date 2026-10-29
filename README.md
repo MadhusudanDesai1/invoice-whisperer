@@ -108,6 +108,17 @@ python -m pytest -q
 
 Free-tier note: the daily token limit allows roughly 40 invoices a day with two passes each. Responses are cached, so re-runs are free and an interrupted batch resumes where it stopped. Running the full 48 takes two days.
 
+## Quick demo (any PDF or image)
+
+Process one unlabeled file, then fix the flagged fields in the review page. This uses 2 API calls, and repeats are cached.
+
+```bash
+python scripts/process_file.py path/to/invoice.pdf
+REVIEW_DB=data/outputs/demo.db streamlit run src/invoice_whisperer/review_app.py
+```
+
+Each field prints as AUTO or REVIEW. Bills with tax or discount lines often flag the total and line items, because the sum rule assumes none (see Limitations). Real bills stay out of git: `data/demo/` is ignored.
+
 ## Project layout
 
 ## License
