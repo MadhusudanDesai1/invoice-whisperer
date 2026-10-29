@@ -12,10 +12,25 @@ Businesses receive invoices as photos, scans and PDFs in every layout, and someo
 
 ## How it works
 
+```mermaid
+flowchart LR
+    A["Invoice image or PDF"] --> B["Ingest"]
+    B --> C["Pre-process<br/>deskew, shadow removal, resize"]
+    C --> D1["Extract pass 1<br/>temperature 0"]
+    C --> D2["Extract pass 2<br/>other prompt, temperature 0.3"]
+    D1 --> E["Validate<br/>Pydantic + rules"]
+    D1 --> G["Per-field confidence"]
+    D1 --> F["Compare the two passes"]
+    D2 --> F
+    E --> G
+    F --> G
+    G --> H{"confidence >= 0.85?"}
+    H -- yes --> I["Auto-accept"]
+    H -- no --> J["Review queue<br/>Streamlit page"]
+    J --> K[("SQLite<br/>model value + human value")]
+    I --> K
+    K --> L["Evaluate + threshold sweep"]
 ```
-image / PDF -> ingest -> pre-process -> extract (2 passes) -> validate -> confidence -> route -> review UI -> SQLite -> evaluate
-```
-
 
 1. **Ingest:** images and PDFs (PyMuPDF renders PDF pages).
 2. **Pre-process:** deskew, shadow removal (illumination flattening), resize and JPEG-encode under the API size limit.
@@ -26,6 +41,22 @@ image / PDF -> ingest -> pre-process -> extract (2 passes) -> validate -> confid
 7. **Review UI:** a Streamlit page shows the invoice beside the fields, with uncertain ones highlighted and editable.
 8. **Store and evaluate:** SQLite keeps the model value and the human value separately, so corrections never overwrite what the model said.
 
+**How a field's confidence is decided:**
+
+```mermaid
+flowchart TB
+    S["Model self-rating<br/>weight 0.25"] --> M["Weighted blend"]
+    V["Validation rules<br/>weight 0.35"] --> M
+    G["Agreement of 2 passes<br/>weight 0.40"] --> M
+    M --> C1{"validation failed<br/>or self-rating < 0.90?"}
+    C1 -- yes --> C2["Confidence capped at 0.5<br/>always reviewed"]
+    C1 -- no --> C3["Confidence = blend"]
+    C2 --> R{">= threshold 0.85?"}
+    C3 --> R
+    R -- yes --> A["AUTO"]
+    R -- no --> W["REVIEW"]
+```
+
 ![Human review page](docs/review_ui.png)
 
 The model name, threshold, self-rating floor and rate limits are all config values in `.env`.
@@ -33,6 +64,13 @@ The model name, threshold, self-rating floor and rate limits are all config valu
 ## Results
 
 Synthetic data with ground-truth labels: 48 invoices, 240 fields, four noise levels.
+
+```mermaid
+pie title Where the 240 fields ended up
+    "Auto-accepted, all correct" : 220
+    "Reviewed, model was right" : 12
+    "Reviewed, model was wrong" : 8
+```
 
 | Metric (threshold 0.85, `SELF_FLOOR` 0.90) | Value |
 |---|---|
@@ -120,6 +158,13 @@ REVIEW_DB=data/outputs/demo.db streamlit run src/invoice_whisperer/review_app.py
 Each field prints as AUTO or REVIEW. Bills with tax or discount lines often flag the total and line items, because the sum rule assumes none (see Limitations). Real bills stay out of git: `data/demo/` is ignored.
 
 ## Project layout
+
+```
+src/invoice_whisperer/   pipeline: ingest, preprocess, extract, validate, confidence, router, store, review UI
+scripts/                 run_batch, evaluate, evaluate_review, sweep, rescore, process_file, generate_*
+tests/                   unit tests (no API calls)
+docs/                    figures
+```
 
 ## License
 
